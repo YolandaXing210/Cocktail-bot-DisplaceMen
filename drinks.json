@@ -1,0 +1,39 @@
+{
+  "Sparkling Star":{
+    "name": "Sparkling Star",
+    "image": "https://cdn.discordapp.com/attachments/1369136759379591251/1369138786629324850/98_Sparkling_star_50x50.png?ex=681ac55c&is=681973dc&hm=f88a8e45b88ed2cb25f2b9c6199be84e340dea16fd426a5c2136b93b505c5cac&",
+    "description": "A mysterious burst of freshness for the summer",
+    "recipe": "Butterfly Glitter, Vodka, Sparkling Blueberry Juice, Mint Syrup, Lavender Bitters."
+  },
+  "Witch's Brew":{
+    "name": "Witch's Brew",
+    "image": "https://cdn.discordapp.com/attachments/1369136759379591251/1369138852043816980/99__Witch_brew_50x50.png?ex=681ac56b&is=681973eb&hm=60a7616b2853e0948fade90ffb09d2c8d78fee75960ffce309899f4a7cf67b46&",
+    "description": "One-legged witch lives in a forest, luring lost children to her hut with bird’s claws. What’s brewing in her pot?",
+    "recipe": "Witch’s Gem, Tequila, Elderflower Liqueur, Fennel, Egg White"
+  },
+  "Deep Sea Special":{
+    "name": "Deep Sea Special",
+    "grade": 3,
+    "image": "https://cdn.discordapp.com/attachments/1369136759379591251/1369138945211760730/100_Deep_Sea_Special_50x50.png?ex=681ac581&is=68197401&hm=619dc4300cb35e6234b4df3137353673561d9abeb32450e83584df82a7fcae4d&",
+    "description": "Icy, pitch-black, and bottomless",
+    "recipe": "Mermaid's Tears, Gin, Lime Zest, Black Tea, Deep Sea Squid Ink"
+  },
+  "Hot Mama":{
+    "name": "Hot Mama",
+    "image": "https://cdn.discordapp.com/attachments/1369136759379591251/1369138978048970762/101_Hot_mama_50x50.png?ex=681ac589&is=68197409&hm=b4be0317bfdbd4cd1d199af399574b901dfe283659b309ec1c5c7543e47836da&",
+    "description": "Spiritual salon for Huamener’s fiery and untamable souls",
+    "recipe": "Bourbon, Ginger Liqueur, Sichuan Peppercorns, Bird's Eye Chili, Hot Mama’s Premium Apple Cider Vinegar"
+  },
+  "Siren's Whisper":{
+    "name": "Siren's Whisper",
+    "image": "https://cdn.discordapp.com/attachments/1369136759379591251/1369139001428152340/102_Siren_whisper_50x50.png?ex=681ac58f&is=6819740f&hm=d55c143bd121df5d930809aefbce58ec952fd8a5a30ca652695a02d294c36291&",
+    "description": "Her haunting melody on the wind.",
+    "recipe": "Siren’s Song, Rum, Lychee Liqueur, Hibiscus Syrup, Sea Salt."
+  },
+  "Sand Women":{
+    "name": "Sand Women",
+    "image": "https://cdn.discordapp.com/attachments/1369136759379591251/1369139027390890024/103_Sand_woman_50x50.png?ex=681ac595&is=68197415&hm=1735bf2e55552bf04b21fdd0899660c388bfa9ff62768c375073ddd37d05b8e7&",
+    "description": "She drifts through deserts, enchants travelers into eternal dreams",
+    "recipe": "Desert Wind, Saffron-infused Brandy, Pineapple Juice, Coconut Cream, Chamomile Liqueur, Gold Dust."
+  }
+}
