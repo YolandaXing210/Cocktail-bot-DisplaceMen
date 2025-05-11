@@ -67,22 +67,19 @@ async def on_message(message):
             users[user_id] = {"drinks": [], "messages": 0}
             first_drink = random.choice(list(cocktails.keys()))
             users[user_id]["drinks"].append(first_drink)
-            await message.channel.send(f"Welcome to the bar, {message.author.mention}. Here's your first drink: {cocktails[first_drink]['name']} 🍸")
+            await message.channel.send(f"Welcome to the bar, {message.author.mention}. Take a seat and relax. Here's your first drink on the house: {cocktails[first_drink]['name']} 🍸")
             save_json("users.json", users)
             return
 
         users[user_id]["messages"] += 1
         if users[user_id]["messages"] >= 5:
-            users[user_id]["messages"] = 0
-            if random.random() < 0.5:
-                drink_name = random.choices(
-                    population=list(cocktails.keys()),
-                    weights=[80 if cocktails[d]['rarity'] == 'Common' else 19 if cocktails[d]['rarity'] == 'Rare' else 1 for d in cocktails],
-                    k=1
-                )[0]
-                users[user_id]["drinks"].append(drink_name)
-                await message.channel.send(f"{message.author.mention}, you earned a new drink: {cocktails[drink_name]['name']}! 🥂")
-        save_json("users.json", users)
+           if random.random() < 0.5:
+                drink_name = random.choice(list(cocktails.keys()))
+                if drink_name not in users[user_id]["drinks"]:
+                    users[user_id]["drinks"].append(drink_name)
+                await message.channel.send(f"{message.author.mention}, here is your new drink: {cocktails[drink_name]['name']}. 🥂 Keep the conversation going.")
+                users[user_id]["messages"] = 0
+            save_json("users.json", users)
 
 @tree.command(name="inventory", description="View your drink collection.")
 async def inventory(interaction: discord.Interaction):
@@ -94,26 +91,30 @@ async def inventory(interaction: discord.Interaction):
     message = f"You own {len(drinks)}/{total} drinks:\n" + "\n".join(drink_names) if drink_names else "You have no drinks yet."
     await interaction.response.send_message(message, ephemeral=True)
 
-@tree.command(name="cocktail", description="Get a random cocktail recipe.")
-async def cocktail(interaction: discord.Interaction):
-    drink_name = random.choice(list(cocktails.keys()))
-    drink = cocktails[drink_name]
-    response = f"**{drink['name']}** ({drink['rarity']})\n{drink['recipe']}"
-    await interaction.response.send_message(response)
-
-@tree.command(name="find", description="Search for a drink by name.")
+@tree.command(name="find", description="Search for a drink you own by name.")
 @app_commands.describe(name="The name to search for")
 async def find(interaction: discord.Interaction, name: str):
+    user_id = str(interaction.user.id)
+    user_drinks = set(users.get(user_id, {}).get("drinks", []))
+
     matches = process.extract(name, cocktails.keys(), limit=3)
     if not matches:
-        await interaction.response.send_message("No drinks found.", ephemeral=True)
+        await interaction.response.send_message("No drinks found. Try again or check your spelling.", ephemeral=True)
         return
 
-    result = "Top matches:\n"
+    result = ""
+    found = False
     for match, score in matches:
-        drink = cocktails[match]
-        result += f"**{drink['name']}** ({drink['rarity']}): {drink['recipe']}\n"
-    await interaction.response.send_message(result)
+        if match in user_drinks:
+            drink = cocktails[match]
+            result += f"**{drink['name']}**\n({drink.get('description', 'No description')})\n{drink.get('recipe', 'No recipe')}\n{drink.get('image', '')}\n\n"
+            found = True
+
+    if found:
+        await interaction.response.send_message(result, ephemeral=True)
+    else:
+        await interaction.response.send_message("You don't have that drink yet. Try again or check your spelling.", ephemeral=True)
+
 
 @tree.command(name="setbar", description="Set the current channel as the bar channel.")
 async def setbar(interaction: discord.Interaction):
