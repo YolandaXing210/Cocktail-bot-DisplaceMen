@@ -116,7 +116,7 @@ async def on_message(message):
 
         await message.channel.send(
             f"Welcome to the bar, {message.author.mention}. "
-            f"Take a seat and relax. Here's your first drink on the house: {cocktails[first_drink]['name']} 🍸"
+            f"Take a seat and relax. Here's your first drink on the house: {cocktails[first_drink]['name']} {cocktails[drink_name]['emoji']}"
         )
         return
 
@@ -131,7 +131,7 @@ async def on_message(message):
                 drinks.add(drink_name)
                 await message.channel.send(
                     f"{message.author.mention}, here is your new drink: "
-                    f"{cocktails[drink_name]['name']}. 🥂 Keep the conversation going."
+                    f"{cocktails[drink_name]['name']} {cocktails[drink_name]['emoji']}. Keep the conversation going."
                 )
             message_count = 0  # Reset after reward
 
