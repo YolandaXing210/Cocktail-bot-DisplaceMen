@@ -64,21 +64,21 @@ async def on_message(message):
     if server_id in servers and servers[server_id]["bar_channel"] == channel_id:
         user_id = str(message.author.id)
         if user_id not in users:
-            users[user_id] = {"drinks": [], "messages_count": 0}
+            users[user_id] = {"drinks": [], "message_count": 0}
             first_drink = random.choice(list(cocktails.keys()))
             users[user_id]["drinks"].append(first_drink)
             await message.channel.send(f"Welcome to the bar, {message.author.mention}. Take a seat and relax. Here's your first drink on the house: {cocktails[first_drink]['name']} 🍸")
             save_json("users.json", users)
             return
 
-        users[user_id]["messages_count"] += 1
-        if users[user_id]["messages_count"] >= 5:
+        users[user_id]["message_count"] += 1
+        if users[user_id]["message_count"] >= 5:
            if random.random() < 0.5:
                 drink_name = random.choice(list(cocktails.keys()))
                 if drink_name not in users[user_id]["drinks"]:
                     users[user_id]["drinks"].append(drink_name)
                 await message.channel.send(f"{message.author.mention}, here is your new drink: {cocktails[drink_name]['name']}. 🥂 Keep the conversation going.")
-                users[user_id]["messages_count"] = 0
+                users[user_id]["message_count"] = 0
         save_json("users.json", users)
 
 @tree.command(name="inventory", description="View your drink collection.")
