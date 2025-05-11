@@ -129,6 +129,7 @@ async def find(interaction: discord.Interaction, name: str):
 
     # Send the result to the user
     await interaction.response.send_message(result, ephemeral=True)
+    matches.clear()
 
 
 @tree.command(name="setbar", description="Set the current channel as the bar channel.")
