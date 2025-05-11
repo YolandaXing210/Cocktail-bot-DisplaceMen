@@ -129,10 +129,10 @@ async def on_message(message):
             drink_name = random.choice(list(cocktails.keys()))
             if drink_name not in drinks:
                 drinks.add(drink_name)
-                await message.channel.send(
-                    f"{message.author.mention}, here is your new drink: "
-                    f"{cocktails[drink_name]['name']} {cocktails[drink_name]['emoji']}. Keep the conversation going."
-                )
+            await message.channel.send(
+                f"{message.author.mention}, here is your new drink: "
+                f"{cocktails[drink_name]['name']} {cocktails[drink_name]['emoji']}. Keep the conversation going."
+            )
             message_count = 0  # Reset after reward
 
     # Save updates
