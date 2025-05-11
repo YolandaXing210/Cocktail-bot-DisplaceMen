@@ -6,6 +6,8 @@ import os
 from fuzzywuzzy import process
 from flask import Flask
 from threading import Thread
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 # Keep alive web server
 app = Flask('')
@@ -34,8 +36,37 @@ def save_json(file_path, data):
 
 # Load your data
 cocktails = load_json('drinks.json')
-users = load_json('users.json')
-servers = load_json('servers.json')
+
+# Load Firebase credentials from environment variables
+cred = credentials.Certificate({
+    "type": os.getenv("FIREBASE_TYPE"),
+    "project_id": os.getenv("FIREBASE_PROJECT_ID"),
+    "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID"),
+    "private_key": os.getenv("FIREBASE_PRIVATE_KEY").replace('\\n', '\n'),  # Ensure correct newline handling
+    "client_email": os.getenv("FIREBASE_CLIENT_EMAIL"),
+    "client_id": os.getenv("FIREBASE_CLIENT_ID"),
+    "auth_uri": os.getenv("FIREBASE_AUTH_URI"),
+    "token_uri": os.getenv("FIREBASE_TOKEN_URI"),
+    "auth_provider_x509_cert_url": os.getenv("FIREBASE_AUTH_PROVIDER_X509_CERT_URL"),
+    "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_X509_CERT_URL"),
+    "universe_domain": "googleapis.com"
+})
+
+firebase_admin.initialize_app(cred)
+
+# Get Firestore instance
+db = firestore.client()
+
+def get_user_from_firestore(user_id):
+    # Access the "users" collection and get the user's data by user ID
+    user_ref = db.collection("users").document(user_id)
+    doc = user_ref.get()
+    return doc.to_dict() if doc.exists else {"drinks": [], "message_count": 0}
+
+def save_user_to_firestore(user_id, user_data):
+    # Save the user data back to Firestore, merging with the existing document
+    user_ref = db.collection("users").document(user_id)
+    user_ref.set(user_data, merge=True)
 
 # Discord setup
 intents = discord.Intents.default()
@@ -55,79 +86,110 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    if message.author.bot:
+    if message.author.bot or not message.guild:
         return
 
     server_id = str(message.guild.id)
     channel_id = str(message.channel.id)
 
-    if server_id in servers and servers[server_id]["bar_channel"] == channel_id:
-        user_id = str(message.author.id)
-        if user_id not in users:
-            users[user_id] = {"drinks": [], "message_count": 0}
-            first_drink = random.choice(list(cocktails.keys()))
-            users[user_id]["drinks"].append(first_drink)
-            await message.channel.send(f"Welcome to the bar, {message.author.mention}. Take a seat and relax. Here's your first drink on the house: {cocktails[first_drink]['name']} 🍸")
-            save_json("users.json", users)
-            return
+    # 🔽 Query Firestore to get the bar channel for this server
+    server_ref = db.collection("servers").document(server_id)
+    server_doc = server_ref.get()
+    if not server_doc.exists:
+        return
 
-        users[user_id]["message_count"] += 1
-        if users[user_id]["message_count"] >= 5:
-           if random.random() < 0.5:
-                drink_name = random.choice(list(cocktails.keys()))
-                if drink_name not in users[user_id]["drinks"]:
-                    users[user_id]["drinks"].append(drink_name)
-                await message.channel.send(f"{message.author.mention}, here is your new drink: {cocktails[drink_name]['name']}. 🥂 Keep the conversation going.")
-                users[user_id]["message_count"] = 0
-        save_json("users.json", users)
+    server_data = server_doc.to_dict()
+    if "bar_channel" not in server_data or server_data["bar_channel"] != channel_id:
+        return
+
+    user_id = str(message.author.id)
+    user_data = get_user_from_firestore(user_id)
+
+    if not user_data:
+        # First time user
+        first_drink = random.choice(list(cocktails.keys()))
+        new_data = {
+            "drinks": [first_drink],
+            "message_count": 0
+        }
+        save_user_to_firestore(user_id, new_data)
+
+        await message.channel.send(
+            f"Welcome to the bar, {message.author.mention}. "
+            f"Take a seat and relax. Here's your first drink on the house: {cocktails[first_drink]['name']} 🍸"
+        )
+        return
+
+    # Returning user
+    drinks = set(user_data.get("drinks", []))
+    message_count = user_data.get("message_count", 0) + 1
+
+    if message_count >= 5:
+        if random.random() < 0.5:
+            drink_name = random.choice(list(cocktails.keys()))
+            if drink_name not in drinks:
+                drinks.add(drink_name)
+                await message.channel.send(
+                    f"{message.author.mention}, here is your new drink: "
+                    f"{cocktails[drink_name]['name']}. 🥂 Keep the conversation going."
+                )
+            message_count = 0  # Reset after reward
+
+    # Save updates
+    updated_data = {
+        "drinks": list(drinks),
+        "message_count": message_count
+    }
+    save_user_to_firestore(user_id, updated_data)
+
+
 
 @tree.command(name="inventory", description="View your drink collection.")
 async def inventory(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True, ephemeral=True)
 
     user_id = str(interaction.user.id)
-    user_data = users.get(user_id, {"drinks": []})
-    drinks = user_data["drinks"]
+    user_data = get_user_from_firestore(user_id)
+    drinks = user_data.get("drinks", [])
     total = len(cocktails)
     drink_names = [cocktails[d]["name"] for d in drinks if d in cocktails]
-    message = f"You own {len(drinks)}/{total} drinks:\n" + "\n".join(drink_names) if drink_names else "You have no drinks yet."
+
+    if drink_names:
+        message = f"You own {len(drinks)}/{total} drinks:\n" + "\n".join(drink_names)
+    else:
+        message = "You have no drinks yet."
+
     await interaction.followup.send(message)
 
 @tree.command(name="find", description="Search for a drink you own by name.")
 @app_commands.describe(name="The name to search for")
 async def find(interaction: discord.Interaction, name: str):
     user_id = str(interaction.user.id)
-    user_drinks = set(users.get(user_id, {}).get("drinks", []))
+    user_data = get_user_from_firestore(user_id)
+    user_drinks = set(user_data.get("drinks", []))
 
-    # Use fuzzy matching to find the best match
     matches = process.extract(name, cocktails.keys(), limit=1)
 
-    # If no matches are found, return a message
     if not matches:
         await interaction.response.send_message("No drinks found. Try again or check your spelling.", ephemeral=True)
         return
 
-    # Try to find the best match
     best_match = None
     for match, score in matches:
-        # Check if the matched drink is owned by the user
         if match in user_drinks:
             best_match = match
-            break  # Stop after finding the first match
+            break
 
-    # If no owned drink was found, respond with a message
     if not best_match:
-        await interaction.response.send_message("You don't have that drink yet. ", ephemeral=True)
+        await interaction.response.send_message("You don't have that drink yet.", ephemeral=True)
         return
 
-    # Show the details of the best match
     drink = cocktails[best_match]
     result = f"**{drink['name']}**\n"
     result += f"({drink.get('description', 'No description')})\n"
     result += f"{drink.get('recipe', 'No recipe')}\n"
     result += f"{drink.get('image', '')}"
 
-    # Send the result to the user
     await interaction.response.send_message(result, ephemeral=True)
     matches.clear()
 
@@ -139,11 +201,13 @@ async def setbar(interaction: discord.Interaction):
         return
 
     guild_id = str(interaction.guild.id)
-    if guild_id not in servers:
-        servers[guild_id] = {}
-    servers[guild_id]["bar_channel"] = str(interaction.channel.id)
-    save_json("servers.json", servers)
+    bar_channel_id = str(interaction.channel.id)
+
+    # Save to Firestore
+    db.collection("servers").document(guild_id).set({"bar_channel": bar_channel_id}, merge=True)
+
     await interaction.response.send_message(f"{interaction.channel.mention} is now the bar channel.")
+
 
 @tree.command(name="deletebar", description="Remove the bar channel setting for this server.")
 async def deletebar(interaction: discord.Interaction):
@@ -152,12 +216,15 @@ async def deletebar(interaction: discord.Interaction):
         return
 
     guild_id = str(interaction.guild.id)
-    if guild_id in servers and "bar_channel" in servers[guild_id]:
-        del servers[guild_id]["bar_channel"]
-        save_json("servers.json", servers)
+    server_ref = db.collection("servers").document(guild_id)
+    server_data = server_ref.get()
+
+    if server_data.exists and "bar_channel" in server_data.to_dict():
+        server_ref.update({"bar_channel": firestore.DELETE_FIELD})
         await interaction.response.send_message("Bar channel has been unset.")
     else:
         await interaction.response.send_message("No bar channel was set for this server.", ephemeral=True)
+
 
 
 client.run(os.getenv("DISCORD_TOKEN"))
