@@ -79,7 +79,7 @@ async def on_message(message):
                     users[user_id]["drinks"].append(drink_name)
                 await message.channel.send(f"{message.author.mention}, here is your new drink: {cocktails[drink_name]['name']}. 🥂 Keep the conversation going.")
                 users[user_id]["messages"] = 0
-            save_json("users.json", users)
+        save_json("users.json", users)
 
 @tree.command(name="inventory", description="View your drink collection.")
 async def inventory(interaction: discord.Interaction):
