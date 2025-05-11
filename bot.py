@@ -99,28 +99,36 @@ async def find(interaction: discord.Interaction, name: str):
     user_id = str(interaction.user.id)
     user_drinks = set(users.get(user_id, {}).get("drinks", []))
 
-    # Use fuzzy matching to find potential drinks by name
-    matches = process.extract(name, cocktails.keys(), limit=3)
+    # Use fuzzy matching to find the best match
+    matches = process.extract(name, cocktails.keys(), limit=1, score_cutoff=80)
+
+    # If no matches are found, return a message
     if not matches:
         await interaction.response.send_message("No drinks found. Try again or check your spelling.", ephemeral=True)
         return
 
-    result = ""
-    found = False
-    # Iterate through the matches
+    # Try to find the best match
+    best_match = None
     for match, score in matches:
         # Check if the matched drink is owned by the user
         if match in user_drinks:
-            drink = cocktails[match]
-            result += f"**{drink['name']}**\n({drink.get('description', 'No description')})\n{drink.get('recipe', 'No recipe')}\n{drink.get('image', '')}\n\n"
-            found = True
+            best_match = match
+            break  # Stop after finding the first match
 
-    if found:
-        # If we found at least one drink owned by the user
-        await interaction.response.send_message(result, ephemeral=True)
-    else:
-        # No matching drink found in user's collection
+    # If no owned drink was found, respond with a message
+    if not best_match:
         await interaction.response.send_message("You don't have that drink yet. Try again or check your spelling.", ephemeral=True)
+        return
+
+    # Show the details of the best match
+    drink = cocktails[best_match]
+    result = f"**{drink['name']}**\n"
+    result += f"({drink.get('description', 'No description')})\n"
+    result += f"{drink.get('recipe', 'No recipe')}\n"
+    result += f"{drink.get('image', '')}"
+
+    # Send the result to the user
+    await interaction.response.send_message(result, ephemeral=True)
 
 
 @tree.command(name="setbar", description="Set the current channel as the bar channel.")
