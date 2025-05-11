@@ -100,7 +100,7 @@ async def find(interaction: discord.Interaction, name: str):
     user_drinks = set(users.get(user_id, {}).get("drinks", []))
 
     # Use fuzzy matching to find the best match
-    matches = process.extract(name, cocktails.keys(), limit=1, score_cutoff=80)
+    matches = process.extract(name, cocktails.keys(), limit=1)
 
     # If no matches are found, return a message
     if not matches:
