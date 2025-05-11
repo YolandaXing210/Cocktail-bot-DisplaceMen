@@ -117,7 +117,7 @@ async def find(interaction: discord.Interaction, name: str):
 
     # If no owned drink was found, respond with a message
     if not best_match:
-        await interaction.response.send_message("You don't have that drink yet. Try again or check your spelling.", ephemeral=True)
+        await interaction.response.send_message("You don't have that drink yet. ", ephemeral=True)
         return
 
     # Show the details of the best match
