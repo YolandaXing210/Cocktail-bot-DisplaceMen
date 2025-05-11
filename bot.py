@@ -78,11 +78,12 @@ tree = app_commands.CommandTree(client)
 @client.event
 async def on_ready():
     print(f'Bot is ready as {client.user}')
-    try:
-        synced = await tree.sync()
-        print(f'Synced {len(synced)} command(s)')
-    except Exception as e:
-        print(f'Failed to sync commands: {e}')
+    for guild in client.guilds:
+        try:
+            synced = await tree.sync(guild=guild)
+            print(f'Synced {len(synced)} commands in {guild.name}')
+        except Exception as e:
+            print(f'Failed to sync commands in {guild.name}: {e}')
 
 @client.event
 async def on_message(message):
