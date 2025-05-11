@@ -83,13 +83,15 @@ async def on_message(message):
 
 @tree.command(name="inventory", description="View your drink collection.")
 async def inventory(interaction: discord.Interaction):
+    await interaction.response.defer(thinking=True, ephemeral=True)
+
     user_id = str(interaction.user.id)
     user_data = users.get(user_id, {"drinks": []})
     drinks = user_data["drinks"]
     total = len(cocktails)
     drink_names = [cocktails[d]["name"] for d in drinks if d in cocktails]
     message = f"You own {len(drinks)}/{total} drinks:\n" + "\n".join(drink_names) if drink_names else "You have no drinks yet."
-    await interaction.response.send_message(message, ephemeral=True)
+    await interaction.followup.send(message)
 
 @tree.command(name="find", description="Search for a drink you own by name.")
 @app_commands.describe(name="The name to search for")
@@ -97,6 +99,7 @@ async def find(interaction: discord.Interaction, name: str):
     user_id = str(interaction.user.id)
     user_drinks = set(users.get(user_id, {}).get("drinks", []))
 
+    # Use fuzzy matching to find potential drinks by name
     matches = process.extract(name, cocktails.keys(), limit=3)
     if not matches:
         await interaction.response.send_message("No drinks found. Try again or check your spelling.", ephemeral=True)
@@ -104,15 +107,19 @@ async def find(interaction: discord.Interaction, name: str):
 
     result = ""
     found = False
+    # Iterate through the matches
     for match, score in matches:
+        # Check if the matched drink is owned by the user
         if match in user_drinks:
             drink = cocktails[match]
             result += f"**{drink['name']}**\n({drink.get('description', 'No description')})\n{drink.get('recipe', 'No recipe')}\n{drink.get('image', '')}\n\n"
             found = True
 
     if found:
+        # If we found at least one drink owned by the user
         await interaction.response.send_message(result, ephemeral=True)
     else:
+        # No matching drink found in user's collection
         await interaction.response.send_message("You don't have that drink yet. Try again or check your spelling.", ephemeral=True)
 
 
