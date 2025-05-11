@@ -128,4 +128,19 @@ async def setbar(interaction: discord.Interaction):
     save_json("servers.json", servers)
     await interaction.response.send_message(f"{interaction.channel.mention} is now the bar channel.")
 
+@tree.command(name="deletebar", description="Remove the bar channel setting for this server.")
+async def deletebar(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("You need admin rights to use this command.", ephemeral=True)
+        return
+
+    guild_id = str(interaction.guild.id)
+    if guild_id in servers and "bar_channel" in servers[guild_id]:
+        del servers[guild_id]["bar_channel"]
+        save_json("servers.json", servers)
+        await interaction.response.send_message("Bar channel has been unset.")
+    else:
+        await interaction.response.send_message("No bar channel was set for this server.", ephemeral=True)
+
+
 client.run(os.getenv("DISCORD_TOKEN"))
