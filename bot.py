@@ -117,8 +117,9 @@ async def on_message(message):
 
         await message.channel.send(
             f"Welcome to the bar, {message.author.mention}. "
-            f"Take a seat and relax. Here's your first drink on the house: {cocktails[first_drink]['name']} {cocktails[drink_name]['emoji']}"
+            f"Take a seat and relax. Here's your first drink on the house: {cocktails[first_drink]['name']} {cocktails[first_drink]['emoji']}"
         )
+
         return
 
     # Returning user
