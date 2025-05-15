@@ -57,6 +57,8 @@ firebase_admin.initialize_app(cred)
 # Get Firestore instance
 db = firestore.client()
 
+OWNER_ID = int(os.getenv("OWNER_ID"))
+
 def get_user_from_firestore(user_id):
     # Access the "users" collection and get the user's data by user ID
     user_ref = db.collection("users").document(user_id)
@@ -113,13 +115,12 @@ async def on_message(message):
             "drinks": [first_drink],
             "message_count": 0
         }
-        save_user_to_firestore(user_id, new_data)
-
         await message.channel.send(
             f"Welcome to the bar, {message.author.mention}. "
             f"Take a seat and relax. Here's your first drink on the house: {cocktails[first_drink]['name']} {cocktails[first_drink]['emoji']}"
         )
-
+        
+        save_user_to_firestore(user_id, new_data)
         return
 
     # Returning user
@@ -228,5 +229,14 @@ async def deletebar(interaction: discord.Interaction):
         await interaction.response.send_message("No bar channel was set for this server.", ephemeral=True)
 
 
+@bot.tree.command(name="speak", description="Make the bot say something.")
+@app_commands.describe(message="What should the bot say?")
+async def speak(interaction: discord.Interaction, message: str):
+    if interaction.user.id != OWNER_ID:
+        await interaction.response.send_message("You’re not allowed to use this command.", ephemeral=True)
+        return
+
+    await interaction.response.defer()
+    await interaction.channel.send(message)
 
 client.run(os.getenv("DISCORD_TOKEN"))
