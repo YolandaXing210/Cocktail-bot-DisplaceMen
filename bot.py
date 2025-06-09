@@ -181,8 +181,7 @@ async def speakremy(interaction: discord.Interaction, name: str):
         await interaction.response.send_message("You’re not allowed to use this command.", ephemeral=True)
         return
 
-    await interaction.channel.send(name)  # correct method
-    await interaction.response.defer()    # silently acknowledge the command to avoid errors
+    await interaction.response.send_message(name)
 
 
 @tree.command(name="find", description="Search for a drink you own by name.")
@@ -254,5 +253,5 @@ try:
     client.run(os.getenv("DISCORD_TOKEN"))
 except Exception as e:
     print("Failed to start bot:", e)
-    traceback.print_exc() 
+    traceback.print_exc()
 
