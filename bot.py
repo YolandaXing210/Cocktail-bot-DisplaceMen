@@ -248,7 +248,7 @@ async def deletebar(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("No bar channel was set for this server.", ephemeral=True)
 
-
+print("Starting bot...")
 try:
     client.run(os.getenv("DISCORD_TOKEN"))
 except Exception as e:
