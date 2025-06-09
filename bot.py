@@ -9,6 +9,8 @@ from threading import Thread
 import firebase_admin
 from firebase_admin import credentials, firestore
 import traceback
+import logging
+logging.basicConfig(level=logging.INFO)
 
 # Keep alive web server
 app = Flask('')
@@ -89,14 +91,14 @@ tree = app_commands.CommandTree(client)
 
 @client.event
 async def on_ready():
-    print(f'Bot is ready as {client.user}')
-    for guild in client.guilds:
-        try:
-            synced = await tree.sync(guild=guild)
-            print(f'Synced {len(synced)} commands in {guild.name}')
-        except Exception as e:
-            print(f'Failed to sync commands in {guild.name}: {e}')
-
+    logging.info(f'Bot is ready as {client.user}')
+    try:
+        synced = await tree.sync()
+        logging.info(f'Synced {len(synced)} global commands')
+    except Exception as e:
+        logging.error(f'Failed to sync commands globally: {e}')
+        
+        
 @client.event
 async def on_message(message):
     if message.author.bot or not message.guild:
