@@ -8,6 +8,7 @@ from flask import Flask
 from threading import Thread
 import firebase_admin
 from firebase_admin import credentials, firestore
+import traceback
 
 # Keep alive web server
 app = Flask('')
@@ -52,10 +53,19 @@ cred = credentials.Certificate({
     "universe_domain": "googleapis.com"
 })
 
-firebase_admin.initialize_app(cred)
+try:
+    firebase_admin.initialize_app(cred)
+    print("Firebase initialized")
+except Exception as e:
+    print("Firebase init failed:", e)
 
 # Get Firestore instance
-db = firestore.client()
+
+try:
+    db = firestore.client()
+    print("Firebase client")
+except Exception as e:
+    print("Firebase client failed:", e)
 
 OWNER_ID = int(os.getenv("OWNER_ID"))
 
@@ -239,6 +249,12 @@ async def deletebar(interaction: discord.Interaction):
         await interaction.response.send_message("No bar channel was set for this server.", ephemeral=True)
 
 
-
+try:
+    client.run(os.getenv("DISCORD_TOKEN"))
+except Exception as e:
+    print("Failed to start bot:", e)
+    traceback.print_exc()
 
 client.run(os.getenv("DISCORD_TOKEN"))
+print("DISCORD_TOKEN:", os.getenv("DISCORD_TOKEN")[:10])  # Don't print the full token
+
