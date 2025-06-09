@@ -175,7 +175,7 @@ async def inventory(interaction: discord.Interaction):
     await interaction.followup.send(message)
 
 @tree.command(name="speak", description="Make the bot say something.")
-@app_commands.describe(name="The bot says...")
+@app_commands.describe(message="The bot says...")
 async def speak(interaction: discord.Interaction, message: str):
     if interaction.user.id != OWNER_ID:
         await interaction.response.send_message("You’re not allowed to use this command.", ephemeral=True)
