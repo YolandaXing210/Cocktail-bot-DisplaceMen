@@ -254,8 +254,5 @@ try:
     client.run(os.getenv("DISCORD_TOKEN"))
 except Exception as e:
     print("Failed to start bot:", e)
-    traceback.print_exc()
-
-client.run(os.getenv("DISCORD_TOKEN"))
-print("DISCORD_TOKEN:", os.getenv("DISCORD_TOKEN")[:10])  # Don't print the full token
+    traceback.print_exc() 
 
