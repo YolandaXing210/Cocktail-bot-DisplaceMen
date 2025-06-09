@@ -78,21 +78,14 @@ client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
 @client.event
-async def on_error(event, *args, **kwargs):
-    print(f"Unhandled error in {event}: {args} {kwargs}")
-
-@client.event
-async def on_disconnect():
-    print("Bot disconnected")
-
-@client.event
-async def on_resumed():
-    print("Bot resumed")
-
-@client.event
 async def on_ready():
     print(f'Bot is ready as {client.user}')
-    await tree.sync()
+    for guild in client.guilds:
+        try:
+            synced = await tree.sync(guild=guild)
+            print(f'Synced {len(synced)} commands in {guild.name}')
+        except Exception as e:
+            print(f'Failed to sync commands in {guild.name}: {e}')
 
 @client.event
 async def on_message(message):
@@ -245,7 +238,7 @@ async def deletebar(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("No bar channel was set for this server.", ephemeral=True)
 
-try:
-    client.run(os.getenv("DISCORD_TOKEN"))
-except Exception as e:
-    print(f"Bot crashed: {e}")
+
+
+
+client.run(os.getenv("DISCORD_TOKEN"))
