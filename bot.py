@@ -185,7 +185,11 @@ async def speakremy(interaction: discord.Interaction, message: str):
         await interaction.response.send_message("You’re not allowed to use this command.", ephemeral=True)
         return
 
-    await interaction.response.send_message(message)
+    # Don't show any response to the user
+    await interaction.response.defer(thinking=False, ephemeral=True)
+
+    # Send as bot message
+    await interaction.channel.send(message)
 
 
 @tree.command(name="find", description="Search for a drink you own by name.")
