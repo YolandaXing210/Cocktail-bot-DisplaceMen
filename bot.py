@@ -11,6 +11,8 @@ from firebase_admin import credentials, firestore
 import traceback
 import logging
 logging.basicConfig(level=logging.INFO)
+import asyncio
+
 
 # Keep alive web server
 app = Flask('')
@@ -250,10 +252,13 @@ async def deletebar(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("No bar channel was set for this server.", ephemeral=True)
 
-print("Starting bot...")
-try:
-    client.run(os.getenv("DISCORD_TOKEN"))
-except Exception as e:
-    print("Failed to start bot:", e)
-    traceback.print_exc()
+async def start_bot():
+    while True:
+        try:
+            await client.start(os.getenv("DISCORD_TOKEN"))
+        except Exception as e:
+            print("Bot crashed. Restarting in 5 seconds...", e)
+            await asyncio.sleep(5)
+
+asyncio.run(start_bot())
 
