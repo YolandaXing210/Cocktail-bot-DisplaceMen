@@ -97,8 +97,7 @@ When responding:
 
 Remember: You're a bartender, not a customer service bot. Be personable and engaging!"""
 
-# Conversation history storage (in-memory for performance)
-conversation_history = {}  # channel_id -> list of recent messages
+# Conversation history configuration
 MAX_HISTORY_LENGTH = 10  # Keep last 10 messages per channel
 
 OWNER_ID = int(os.getenv("OWNER_ID"))
@@ -114,41 +113,73 @@ def save_user_to_firestore(user_id, user_data):
     user_ref = db.collection("users").document(user_id)
     user_ref.set(user_data, merge=True)
 
-def add_message_to_history(channel_id, author_name, content, is_bot=False):
-    """Add a message to the conversation history for a channel"""
-    if channel_id not in conversation_history:
-        conversation_history[channel_id] = []
-    
-    message_entry = {
-        "author": author_name,
-        "content": content,
-        "is_bot": is_bot,
-        "timestamp": asyncio.get_event_loop().time()
-    }
-    
-    conversation_history[channel_id].append(message_entry)
-    
-    # Keep only the last MAX_HISTORY_LENGTH messages
-    if len(conversation_history[channel_id]) > MAX_HISTORY_LENGTH:
-        conversation_history[channel_id] = conversation_history[channel_id][-MAX_HISTORY_LENGTH:]
-
-def get_conversation_context(channel_id, max_messages=5):
-    """Get recent conversation context for a channel"""
-    if channel_id not in conversation_history:
-        return ""
-    
-    recent_messages = conversation_history[channel_id][-max_messages:]
-    context_lines = []
-    
-    for msg in recent_messages:
-        if msg["is_bot"]:
-            context_lines.append(f"Bartender: {msg['content']}")
+def add_message_to_history(server_id, channel_id, author_name, content, is_bot=False):
+    """Add a message to the conversation history for a channel in Firebase"""
+    try:
+        # Create a unique document ID for this channel's history
+        history_ref = db.collection("servers").document(server_id).collection("conversation_history").document(channel_id)
+        
+        # Get current history
+        doc = history_ref.get()
+        if doc.exists:
+            history_data = doc.to_dict()
+            messages = history_data.get("messages", [])
         else:
-            context_lines.append(f"{msg['author']}: {msg['content']}")
-    
-    return "\n".join(context_lines)
+            messages = []
+        
+        # Add new message
+        message_entry = {
+            "author": author_name,
+            "content": content,
+            "is_bot": is_bot,
+            "timestamp": asyncio.get_event_loop().time()
+        }
+        
+        messages.append(message_entry)
+        
+        # Keep only the last MAX_HISTORY_LENGTH messages
+        if len(messages) > MAX_HISTORY_LENGTH:
+            messages = messages[-MAX_HISTORY_LENGTH:]
+        
+        # Save back to Firebase
+        history_ref.set({"messages": messages}, merge=True)
+        
+    except Exception as e:
+        logging.error(f"Error saving message to history: {e}")
 
-async def get_ai_response(user_message, user_name, user_drinks=None, channel_id=None):
+def get_conversation_context(server_id, channel_id, max_messages=5):
+    """Get recent conversation context for a channel from Firebase"""
+    try:
+        # Get history from Firebase
+        history_ref = db.collection("servers").document(server_id).collection("conversation_history").document(channel_id)
+        doc = history_ref.get()
+        
+        if not doc.exists:
+            return ""
+        
+        history_data = doc.to_dict()
+        messages = history_data.get("messages", [])
+        
+        if not messages:
+            return ""
+        
+        # Get the last max_messages
+        recent_messages = messages[-max_messages:]
+        context_lines = []
+        
+        for msg in recent_messages:
+            if msg.get("is_bot", False):
+                context_lines.append(f"Bartender: {msg['content']}")
+            else:
+                context_lines.append(f"{msg['author']}: {msg['content']}")
+        
+        return "\n".join(context_lines)
+        
+    except Exception as e:
+        logging.error(f"Error getting conversation context: {e}")
+        return ""
+
+async def get_ai_response(user_message, user_name, user_drinks=None, server_id=None, channel_id=None):
     """Get AI response from OpenAI based on user message and context"""
     try:
         # Build context about the user's drink collection
@@ -160,8 +191,8 @@ async def get_ai_response(user_message, user_name, user_drinks=None, channel_id=
         
         # Get conversation history context
         conversation_context = ""
-        if channel_id:
-            conversation_context = get_conversation_context(channel_id, max_messages=5)
+        if server_id and channel_id:
+            conversation_context = get_conversation_context(server_id, channel_id, max_messages=5)
             if conversation_context:
                 conversation_context = f"\n\nRecent conversation:\n{conversation_context}"
         
@@ -241,13 +272,13 @@ async def on_message(message):
         
         if content:  # Only respond if there's actual content
             # Add user message to conversation history
-            add_message_to_history(channel_id, message.author.display_name, content, is_bot=False)
+            add_message_to_history(server_id, channel_id, message.author.display_name, content, is_bot=False)
             
             user_drinks = user_data.get("drinks", []) if user_data else []
-            ai_response = await get_ai_response(content, message.author.display_name, user_drinks, channel_id)
+            ai_response = await get_ai_response(content, message.author.display_name, user_drinks, server_id, channel_id)
             
             # Add bot response to conversation history
-            add_message_to_history(channel_id, "Bartender", ai_response, is_bot=True)
+            add_message_to_history(server_id, channel_id, "Bartender", ai_response, is_bot=True)
             
             await message.channel.send(ai_response)
         return
@@ -283,7 +314,7 @@ async def on_message(message):
             message_count = 0  # Reset after reward
 
     # Add regular message to conversation history (for context)
-    add_message_to_history(channel_id, message.author.display_name, message.content, is_bot=False)
+    add_message_to_history(server_id, channel_id, message.author.display_name, message.content, is_bot=False)
     
     # Save updates
     updated_data = {
