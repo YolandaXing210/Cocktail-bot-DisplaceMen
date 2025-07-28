@@ -78,6 +78,7 @@ if not openai_api_key:
     logging.error("OPENAI_API_KEY environment variable is not set!")
 else:
     logging.info("OpenAI API key is configured")
+    openai.api_key = openai_api_key
 
 # AI Character configuration
 AI_CHARACTER_PROMPT = """You are a friendly and knowledgeable bartender at a cozy cocktail bar. You have a warm personality and love talking about drinks, cocktails, and creating a welcoming atmosphere. You're passionate about mixology and enjoy sharing your knowledge with customers.
@@ -219,7 +220,7 @@ async def get_ai_response(user_message, user_name, user_drinks=None, server_id=N
         logging.info(f"Calling OpenAI API with {len(messages)} messages")
         
         # Get response from OpenAI
-        client = openai.OpenAI(api_key=openai_api_key)
+        client = openai.OpenAI()
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
