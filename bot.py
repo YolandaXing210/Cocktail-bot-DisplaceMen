@@ -73,7 +73,11 @@ except Exception as e:
     print("Firebase client failed:", e)
 
 # OpenAI setup
-openai.api_key = os.getenv("OPENAI_API_KEY")
+openai_api_key = os.getenv("OPENAI_API_KEY")
+if not openai_api_key:
+    logging.error("OPENAI_API_KEY environment variable is not set!")
+else:
+    logging.info("OpenAI API key is configured")
 
 # AI Character configuration
 AI_CHARACTER_PROMPT = """You are a friendly and knowledgeable bartender at a cozy cocktail bar. You have a warm personality and love talking about drinks, cocktails, and creating a welcoming atmosphere. You're passionate about mixology and enjoy sharing your knowledge with customers.
@@ -182,6 +186,8 @@ def get_conversation_context(server_id, channel_id, max_messages=5):
 async def get_ai_response(user_message, user_name, user_drinks=None, server_id=None, channel_id=None):
     """Get AI response from OpenAI based on user message and context"""
     try:
+        logging.info(f"Starting AI response for user: {user_name}, message: {user_message}")
+        
         # Build context about the user's drink collection
         drink_context = ""
         if user_drinks:
@@ -192,6 +198,7 @@ async def get_ai_response(user_message, user_name, user_drinks=None, server_id=N
         # Get conversation history context
         conversation_context = ""
         if server_id and channel_id:
+            logging.info(f"Getting conversation context for server: {server_id}, channel: {channel_id}")
             conversation_context = get_conversation_context(server_id, channel_id, max_messages=5)
             if conversation_context:
                 conversation_context = f"\n\nRecent conversation:\n{conversation_context}"
@@ -209,8 +216,10 @@ async def get_ai_response(user_message, user_name, user_drinks=None, server_id=N
         # Add the current user message
         messages.append({"role": "user", "content": f"User ({user_name}) says: {user_message}"})
         
+        logging.info(f"Calling OpenAI API with {len(messages)} messages")
+        
         # Get response from OpenAI
-        client = openai.OpenAI()
+        client = openai.OpenAI(api_key=openai_api_key)
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
@@ -218,10 +227,12 @@ async def get_ai_response(user_message, user_name, user_drinks=None, server_id=N
             temperature=0.8
         )
         
+        logging.info(f"OpenAI response received successfully")
         return response.choices[0].message.content.strip()
         
     except Exception as e:
         logging.error(f"Error getting AI response: {e}")
+        logging.error(f"Full traceback: {traceback.format_exc()}")
         return f"Hey {user_name}! Sorry, I'm having trouble thinking straight right now. Maybe it's the late shift catching up to me! 😅"
 
 # Discord setup
