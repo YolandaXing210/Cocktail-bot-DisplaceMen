@@ -245,6 +245,7 @@ tree = app_commands.CommandTree(client)
 @client.event
 async def on_ready():
     logging.info(f'Bot is ready as {client.user}')
+    logging.info(f'Bot ID: {client.user.id}')
     try:
         synced = await tree.sync()
         logging.info(f'Synced {len(synced)} global commands')
@@ -263,6 +264,10 @@ async def on_message(message):
     # Check if bot is mentioned (for AI responses)
     bot_mentioned = client.user in message.mentions
     
+    logging.info(f"Message received from {message.author.display_name} in {message.guild.name}")
+    logging.info(f"Bot mentioned: {bot_mentioned}")
+    logging.info(f"Message content: {message.content}")
+    
     # 🔽 Query Firestore to get the bar channel for this server
     server_ref = db.collection("servers").document(server_id)
     server_doc = server_ref.get()
@@ -278,20 +283,40 @@ async def on_message(message):
 
     # Handle AI responses if bot is mentioned
     if bot_mentioned:
+        logging.info("Bot was mentioned, processing AI response...")
+        
         # Extract the message content without the bot mention
         content = message.content.replace(f'<@{client.user.id}>', '').replace(f'<@!{client.user.id}>', '').strip()
+        logging.info(f"Extracted content: '{content}'")
         
         if content:  # Only respond if there's actual content
-            # Add user message to conversation history
-            add_message_to_history(server_id, channel_id, message.author.display_name, content, is_bot=False)
+            logging.info("Content is not empty, proceeding with AI response...")
             
-            user_drinks = user_data.get("drinks", []) if user_data else []
-            ai_response = await get_ai_response(content, message.author.display_name, user_drinks, server_id, channel_id)
-            
-            # Add bot response to conversation history
-            add_message_to_history(server_id, channel_id, "Bartender", ai_response, is_bot=True)
-            
-            await message.channel.send(ai_response)
+            try:
+                # Add user message to conversation history
+                logging.info("Adding message to history...")
+                add_message_to_history(server_id, channel_id, message.author.display_name, content, is_bot=False)
+                
+                user_drinks = user_data.get("drinks", []) if user_data else []
+                logging.info(f"User drinks: {user_drinks}")
+                
+                logging.info("Calling get_ai_response...")
+                ai_response = await get_ai_response(content, message.author.display_name, user_drinks, server_id, channel_id)
+                logging.info(f"AI response received: {ai_response}")
+                
+                # Add bot response to conversation history
+                add_message_to_history(server_id, channel_id, "Bartender", ai_response, is_bot=True)
+                
+                logging.info("Sending response to channel...")
+                await message.channel.send(ai_response)
+                logging.info("Response sent successfully!")
+                
+            except Exception as e:
+                logging.error(f"Error in AI response handling: {e}")
+                logging.error(f"Full traceback: {traceback.format_exc()}")
+                await message.channel.send(f"Hey {message.author.mention}! Sorry, something went wrong. Please try again.")
+        else:
+            logging.info("Content is empty, not responding")
         return
 
     if not user_data:
