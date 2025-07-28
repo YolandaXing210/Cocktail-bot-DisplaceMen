@@ -121,16 +121,22 @@ def save_user_to_firestore(user_id, user_data):
 def add_message_to_history(server_id, channel_id, author_name, content, is_bot=False):
     """Add a message to the conversation history for a channel in Firebase"""
     try:
-        # Create a unique document ID for this channel's history
-        history_ref = db.collection("servers").document(server_id).collection("conversation_history").document(channel_id)
+        # Get the server document
+        server_ref = db.collection("servers").document(server_id)
+        doc = server_ref.get()
         
-        # Get current history
-        doc = history_ref.get()
         if doc.exists:
-            history_data = doc.to_dict()
-            messages = history_data.get("messages", [])
+            server_data = doc.to_dict()
         else:
-            messages = []
+            server_data = {}
+        
+        # Initialize conversation_history if it doesn't exist
+        if "conversation_history" not in server_data:
+            server_data["conversation_history"] = {}
+        
+        # Initialize channel history if it doesn't exist
+        if channel_id not in server_data["conversation_history"]:
+            server_data["conversation_history"][channel_id] = []
         
         # Add new message
         message_entry = {
@@ -140,14 +146,14 @@ def add_message_to_history(server_id, channel_id, author_name, content, is_bot=F
             "timestamp": asyncio.get_event_loop().time()
         }
         
-        messages.append(message_entry)
+        server_data["conversation_history"][channel_id].append(message_entry)
         
         # Keep only the last MAX_HISTORY_LENGTH messages
-        if len(messages) > MAX_HISTORY_LENGTH:
-            messages = messages[-MAX_HISTORY_LENGTH:]
+        if len(server_data["conversation_history"][channel_id]) > MAX_HISTORY_LENGTH:
+            server_data["conversation_history"][channel_id] = server_data["conversation_history"][channel_id][-MAX_HISTORY_LENGTH:]
         
         # Save back to Firebase
-        history_ref.set({"messages": messages}, merge=True)
+        server_ref.set(server_data, merge=True)
         
     except Exception as e:
         logging.error(f"Error saving message to history: {e}")
@@ -155,21 +161,22 @@ def add_message_to_history(server_id, channel_id, author_name, content, is_bot=F
 def get_conversation_context(server_id, channel_id, max_messages=5):
     """Get recent conversation context for a channel from Firebase"""
     try:
-        # Get history from Firebase
-        history_ref = db.collection("servers").document(server_id).collection("conversation_history").document(channel_id)
-        doc = history_ref.get()
+        # Get server document from Firebase
+        server_ref = db.collection("servers").document(server_id)
+        doc = server_ref.get()
         
         if not doc.exists:
             return ""
         
-        history_data = doc.to_dict()
-        messages = history_data.get("messages", [])
+        server_data = doc.to_dict()
+        conversation_history = server_data.get("conversation_history", {})
+        channel_messages = conversation_history.get(channel_id, [])
         
-        if not messages:
+        if not channel_messages:
             return ""
         
         # Get the last max_messages
-        recent_messages = messages[-max_messages:]
+        recent_messages = channel_messages[-max_messages:]
         context_lines = []
         
         for msg in recent_messages:
@@ -207,6 +214,11 @@ async def get_ai_response(user_message, user_name, user_drinks=None, server_id=N
         # Create the full prompt
         full_prompt = f"{AI_CHARACTER_PROMPT}{drink_context}{conversation_context}\n\nUser ({user_name}) says: {user_message}\n\nBartender:"
         
+        # Print the full prompt for debugging
+        print("FULL PROMPT ===")
+        print(full_prompt)
+        print("=== END PROMPT")
+        
         # Prepare messages for OpenAI
         messages = [{"role": "system", "content": AI_CHARACTER_PROMPT}]
         
@@ -219,13 +231,21 @@ async def get_ai_response(user_message, user_name, user_drinks=None, server_id=N
         
         logging.info(f"Calling OpenAI API with {len(messages)} messages")
         
-        # Get response from OpenAI
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            max_tokens=150,
-            temperature=0.8
-        )
+        # Debug try/catch directly around the OpenAI call
+        try:
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=messages,
+                max_tokens=150,
+                temperature=0.8
+            )
+        except Exception as e:
+            print("🔴 OpenAI Call Failed:")
+            print(e)
+            return "Oops, couldn't reach the bartender brain right now 🍸"
+        
+        # Print the full OpenAI response object
+        print("FULL OpenAI Response Object:", response)
         
         logging.info(f"OpenAI response received successfully")
         return response.choices[0].message.content.strip()
@@ -246,6 +266,17 @@ tree = app_commands.CommandTree(client)
 async def on_ready():
     logging.info(f'Bot is ready as {client.user}')
     logging.info(f'Bot ID: {client.user.id}')
+    
+    # Test OpenAI API on startup
+    try:
+        test = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": "Hello!"}]
+        )
+        print("✅ OpenAI works. Test response:", test.choices[0].message.content.strip())
+    except Exception as e:
+        print("❌ OpenAI test failed:", e)
+    
     try:
         synced = await tree.sync()
         logging.info(f'Synced {len(synced)} global commands')
