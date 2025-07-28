@@ -220,8 +220,7 @@ async def get_ai_response(user_message, user_name, user_drinks=None, server_id=N
         logging.info(f"Calling OpenAI API with {len(messages)} messages")
         
         # Get response from OpenAI
-        client = openai.OpenAI()
-        response = client.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=messages,
             max_tokens=150,
