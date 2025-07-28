@@ -12,6 +12,7 @@ import traceback
 import logging
 logging.basicConfig(level=logging.INFO)
 import asyncio
+import openai
 
 
 # Keep alive web server
@@ -71,6 +72,35 @@ try:
 except Exception as e:
     print("Firebase client failed:", e)
 
+# OpenAI setup
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+# AI Character configuration
+AI_CHARACTER_PROMPT = """You are a friendly and knowledgeable bartender at a cozy cocktail bar. You have a warm personality and love talking about drinks, cocktails, and creating a welcoming atmosphere. You're passionate about mixology and enjoy sharing your knowledge with customers.
+
+Key traits:
+- Warm, welcoming, and conversational
+- Knowledgeable about cocktails and spirits
+- Enjoys making people feel comfortable
+- Has a sense of humor but keeps it appropriate
+- Loves sharing drink recommendations and stories
+- Speaks naturally, not like a formal assistant
+
+When responding:
+- Keep responses conversational and friendly
+- You can mention specific cocktails from the bar's menu
+- Be encouraging and supportive
+- If asked about drinks you don't know, be honest but helpful
+- Keep responses reasonably short (1-3 sentences typically)
+- Use emojis occasionally to add personality
+- Pay attention to the conversation context and refer to previous messages when relevant
+
+Remember: You're a bartender, not a customer service bot. Be personable and engaging!"""
+
+# Conversation history storage (in-memory for performance)
+conversation_history = {}  # channel_id -> list of recent messages
+MAX_HISTORY_LENGTH = 10  # Keep last 10 messages per channel
+
 OWNER_ID = int(os.getenv("OWNER_ID"))
 
 def get_user_from_firestore(user_id):
@@ -83,6 +113,84 @@ def save_user_to_firestore(user_id, user_data):
     # Save the user data back to Firestore, merging with the existing document
     user_ref = db.collection("users").document(user_id)
     user_ref.set(user_data, merge=True)
+
+def add_message_to_history(channel_id, author_name, content, is_bot=False):
+    """Add a message to the conversation history for a channel"""
+    if channel_id not in conversation_history:
+        conversation_history[channel_id] = []
+    
+    message_entry = {
+        "author": author_name,
+        "content": content,
+        "is_bot": is_bot,
+        "timestamp": asyncio.get_event_loop().time()
+    }
+    
+    conversation_history[channel_id].append(message_entry)
+    
+    # Keep only the last MAX_HISTORY_LENGTH messages
+    if len(conversation_history[channel_id]) > MAX_HISTORY_LENGTH:
+        conversation_history[channel_id] = conversation_history[channel_id][-MAX_HISTORY_LENGTH:]
+
+def get_conversation_context(channel_id, max_messages=5):
+    """Get recent conversation context for a channel"""
+    if channel_id not in conversation_history:
+        return ""
+    
+    recent_messages = conversation_history[channel_id][-max_messages:]
+    context_lines = []
+    
+    for msg in recent_messages:
+        if msg["is_bot"]:
+            context_lines.append(f"Bartender: {msg['content']}")
+        else:
+            context_lines.append(f"{msg['author']}: {msg['content']}")
+    
+    return "\n".join(context_lines)
+
+async def get_ai_response(user_message, user_name, user_drinks=None, channel_id=None):
+    """Get AI response from OpenAI based on user message and context"""
+    try:
+        # Build context about the user's drink collection
+        drink_context = ""
+        if user_drinks:
+            drink_names = [cocktails.get(drink, {}).get('name', drink) for drink in user_drinks if drink in cocktails]
+            if drink_names:
+                drink_context = f"\n\nContext: {user_name} has tried these drinks: {', '.join(drink_names)}."
+        
+        # Get conversation history context
+        conversation_context = ""
+        if channel_id:
+            conversation_context = get_conversation_context(channel_id, max_messages=5)
+            if conversation_context:
+                conversation_context = f"\n\nRecent conversation:\n{conversation_context}"
+        
+        # Create the full prompt
+        full_prompt = f"{AI_CHARACTER_PROMPT}{drink_context}{conversation_context}\n\nUser ({user_name}) says: {user_message}\n\nBartender:"
+        
+        # Prepare messages for OpenAI
+        messages = [{"role": "system", "content": AI_CHARACTER_PROMPT}]
+        
+        # Add conversation context if available
+        if conversation_context:
+            messages.append({"role": "user", "content": f"Context: {drink_context}{conversation_context}"})
+        
+        # Add the current user message
+        messages.append({"role": "user", "content": f"User ({user_name}) says: {user_message}"})
+        
+        # Get response from OpenAI
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=messages,
+            max_tokens=150,
+            temperature=0.8
+        )
+        
+        return response.choices[0].message.content.strip()
+        
+    except Exception as e:
+        logging.error(f"Error getting AI response: {e}")
+        return f"Hey {user_name}! Sorry, I'm having trouble thinking straight right now. Maybe it's the late shift catching up to me! 😅"
 
 # Discord setup
 intents = discord.Intents.default()
@@ -109,6 +217,9 @@ async def on_message(message):
     server_id = str(message.guild.id)
     channel_id = str(message.channel.id)
 
+    # Check if bot is mentioned (for AI responses)
+    bot_mentioned = client.user in message.mentions
+    
     # 🔽 Query Firestore to get the bar channel for this server
     server_ref = db.collection("servers").document(server_id)
     server_doc = server_ref.get()
@@ -121,6 +232,24 @@ async def on_message(message):
 
     user_id = str(message.author.id)
     user_data = get_user_from_firestore(user_id)
+
+    # Handle AI responses if bot is mentioned
+    if bot_mentioned:
+        # Extract the message content without the bot mention
+        content = message.content.replace(f'<@{client.user.id}>', '').replace(f'<@!{client.user.id}>', '').strip()
+        
+        if content:  # Only respond if there's actual content
+            # Add user message to conversation history
+            add_message_to_history(channel_id, message.author.display_name, content, is_bot=False)
+            
+            user_drinks = user_data.get("drinks", []) if user_data else []
+            ai_response = await get_ai_response(content, message.author.display_name, user_drinks, channel_id)
+            
+            # Add bot response to conversation history
+            add_message_to_history(channel_id, "Bartender", ai_response, is_bot=True)
+            
+            await message.channel.send(ai_response)
+        return
 
     if not user_data:
         # First time user
@@ -152,6 +281,9 @@ async def on_message(message):
             )
             message_count = 0  # Reset after reward
 
+    # Add regular message to conversation history (for context)
+    add_message_to_history(channel_id, message.author.display_name, message.content, is_bot=False)
+    
     # Save updates
     updated_data = {
         "drinks": list(drinks),
@@ -261,6 +393,58 @@ async def deletebar(interaction: discord.Interaction):
         await interaction.response.send_message("Bar channel has been unset.")
     else:
         await interaction.response.send_message("No bar channel was set for this server.", ephemeral=True)
+
+
+@tree.command(name="give", description="Give a specific cocktail to a user. (Owner only)")
+@app_commands.describe(user="The user to give the cocktail to", cocktail="The name of the cocktail to give")
+async def give(interaction: discord.Interaction, user: discord.Member, cocktail: str):
+    if interaction.user.id != OWNER_ID:
+        await interaction.response.send_message("You're not allowed to use this command.", ephemeral=True)
+        return
+
+    try:
+        # Find the cocktail using fuzzy matching
+        matches = process.extract(cocktail, cocktails.keys(), limit=1)
+        
+        if not matches:
+            await interaction.response.send_message("No cocktail found with that name. Try again or check your spelling.", ephemeral=True)
+            return
+
+        best_match, score = matches[0]
+        
+        # Get the user's current data
+        user_id = str(user.id)
+        user_data = get_user_from_firestore(user_id)
+        
+        # Handle case where user_data might be None (though get_user_from_firestore should handle this)
+        if user_data is None:
+            user_data = {"drinks": [], "message_count": 0}
+        
+        user_drinks = set(user_data.get("drinks", []))
+        
+        # Add the cocktail to user's collection
+        user_drinks.add(best_match)
+        
+        # Save updated data
+        updated_data = {
+            "drinks": list(user_drinks),
+            "message_count": user_data.get("message_count", 0)
+        }
+        save_user_to_firestore(user_id, updated_data)
+        
+        # Send confirmation message
+        drink = cocktails[best_match]
+        await interaction.response.defer(thinking=False, ephemeral=True)
+        await interaction.channel.send(
+            f"{user.mention}, here is the **{drink['name']}** for you. {drink['emoji']}"
+        )
+        
+    except Exception as e:
+        logging.error(f"Error in give command: {e}")
+        await interaction.response.send_message(
+            f"❌ Failed to give cocktail to {user.mention}. Please try again or check the logs.", 
+            ephemeral=True
+        )
 
 async def start_bot():
     while True:
