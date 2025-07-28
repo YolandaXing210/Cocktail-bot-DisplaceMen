@@ -179,7 +179,8 @@ async def get_ai_response(user_message, user_name, user_drinks=None, channel_id=
         messages.append({"role": "user", "content": f"User ({user_name}) says: {user_message}"})
         
         # Get response from OpenAI
-        response = openai.ChatCompletion.create(
+        client = openai.OpenAI()
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
             max_tokens=150,
