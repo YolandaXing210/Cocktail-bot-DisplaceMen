@@ -43,6 +43,64 @@ def save_json(file_path, data):
 # Load your data
 cocktails = load_json('drinks.json')
 
+# Create cocktail menu for AI prompt
+def format_cocktail_menu():
+    """Format the cocktail menu for inclusion in AI prompt"""
+    menu_items = []
+    for key, drink in cocktails.items():
+        menu_items.append(f"• {drink['name']}: {drink['description']}")
+        menu_items.append(f"  Recipe: {drink['recipe']}")
+        menu_items.append("")  # Add empty line for spacing
+    return "\n".join(menu_items)
+
+COCKTAIL_MENU = format_cocktail_menu()
+
+def should_remy_give_drink(user_name, user_message, remy_response, user_drinks):
+    """Determine if Remy should give a drink based on conversation comfort"""
+    try:
+        # Analyze conversation for comfort indicators
+        comfort_keywords = [
+            "thank you", "thanks", "appreciate", "love", "great", "amazing", 
+            "wonderful", "fantastic", "awesome", "perfect", "best", "favorite",
+            "comfortable", "relaxed", "happy", "enjoy", "pleasure", "nice"
+        ]
+        
+        # Check user message for positive sentiment
+        user_positive = any(keyword in user_message.lower() for keyword in comfort_keywords)
+        
+        # Check Remy's response for warmth indicators
+        remy_warm_keywords = ["😊", "😉", "✨", "🍸", "warm", "smile", "enjoy", "pleasure", "welcome"]
+        remy_warm = any(keyword in remy_response.lower() or keyword in remy_response for keyword in remy_warm_keywords)
+        
+        # Check conversation length (more comfortable with longer conversations)
+        conversation_length = len(user_drinks)  # Rough proxy for interaction history
+        
+        # Probability calculation
+        base_probability = 0.05  # 5% base chance
+        
+        if user_positive:
+            base_probability += 0.15  # +15% if user is positive
+        
+        if remy_warm:
+            base_probability += 0.10  # +10% if Remy is warm
+        
+        if conversation_length > 2:
+            base_probability += 0.10  # +10% if user has some drinks already
+        
+        # Cap at 40% maximum probability
+        final_probability = min(base_probability, 0.40)
+        
+        # Random chance based on probability
+        return random.random() < final_probability
+        
+    except Exception as e:
+        logging.error(f"Error in should_remy_give_drink: {e}")
+        return False
+
+def select_drink_to_give(user_drinks):
+    """Select which drink to give to the user"""
+    return get_random_drink_not_owned(user_drinks)
+
 # Load Firebase credentials from environment variables
 cred = credentials.Certificate({
     "type": "service_account",
@@ -81,29 +139,53 @@ else:
     openai.api_key = openai_api_key
 
 # AI Character configuration
-AI_CHARACTER_PROMPT = """You are a friendly and knowledgeable bartender at a cozy cocktail bar. You have a warm personality and love talking about drinks, cocktails, and creating a welcoming atmosphere. You're passionate about mixology and enjoy sharing your knowledge with customers.
+AI_CHARACTER_PROMPT = """
+You are Remy, the warm and sharp-witted manager of "Choose-One Bar", a trendy cocktail bar in Huanmen Town.
 
-Key traits:
-- Warm, welcoming, and conversational
-- Knowledgeable about cocktails and spirits
-- Enjoys making people feel comfortable
-- Has a sense of humor but keeps it appropriate
-- Loves sharing drink recommendations and stories
-- Speaks naturally, not like a formal assistant
+The bar is light and stylish — wood frame, brass lighting, marble counter. Very Instagrammable, very aesthetic. Drinks are expensive, not always good, but the vibes draw in more and more tourists since summer.
 
-When responding:
-- Keep responses conversational and friendly
-- You can mention specific cocktails from the bar's menu
-- Be encouraging and supportive
-- If asked about drinks you don't know, be honest but helpful
-- Keep responses reasonably short (1-3 sentences typically)
-- Use emojis occasionally to add personality
-- Pay attention to the conversation context and refer to previous messages when relevant
+You love your job and enjoy meeting customers. You're known for your calm presence, easy smile, and inviting energy. Most guests feel instantly comfortable with you.
 
-Remember: You're a bartender, not a customer service bot. Be personable and engaging!"""
+But don’t mistake you for a pushover. You have a touch of dark humor and know how to handle rude or difficult guests — with elegance and just enough edge to remind people who’s in charge.
+
+How you speak:
+- Casual, confident, sometimes teasing
+- Keep it short and relaxed (1–3 sentences)
+- Add emojis when it fits 🍸😉✨
+- If someone’s upset or being rude, respond smoothly but with authority
+- If someone seems down, comfort them — gently, not cheesy
+- You may playfully throw shade, but never be cruel
+
+Drinks:
+- Reference real cocktails from the bar’s menu (cocktails JSON)
+- You’re allowed to make up new drinks for fun or as emotional gestures
+- If someone asks about a bad drink, admit it and joke a little
+- Feel free to recommend drinks based on mood or weather
+
+Context:
+- You remember short conversation history in the channel
+- Refer to previous drinks if mentioned
+- Occasionally comment on how trendy the bar has gotten or complain lightly about tourists
+
+Above all: you’re Remy — calm, magnetic, and in control behind the bar.
+"""
 
 # Conversation history configuration
 MAX_HISTORY_LENGTH = 10  # Keep last 10 messages per channel
+
+# Random selection utilities
+def get_random_drink():
+    """Get a random drink from the cocktail menu"""
+    return random.choice(list(cocktails.keys()))
+
+def get_random_drink_not_owned(user_drinks):
+    """Get a random drink that the user doesn't own"""
+    available_drinks = [drink for drink in cocktails.keys() if drink not in user_drinks]
+    return random.choice(available_drinks) if available_drinks else None
+
+def should_give_reward(message_count, base_chance=0.5):
+    """Determine if a reward should be given based on message count"""
+    return message_count >= 5 and random.random() < base_chance
 
 OWNER_ID = int(os.getenv("OWNER_ID"))
 
@@ -211,8 +293,8 @@ async def get_ai_response(user_message, user_name, user_drinks=None, server_id=N
             if conversation_context:
                 conversation_context = f"\n\nRecent conversation:\n{conversation_context}"
         
-        # Create the full prompt
-        full_prompt = f"{AI_CHARACTER_PROMPT}{drink_context}{conversation_context}\n\nUser ({user_name}) says: {user_message}\n\nBartender:"
+        # Create the full prompt with menu included
+        full_prompt = f"{AI_CHARACTER_PROMPT}\n\nCurrent Menu:\n{COCKTAIL_MENU}\n\n{drink_context}{conversation_context}\n\nUser ({user_name}) says: {user_message}\n\n"
         
         # Print the full prompt for debugging
         print("FULL PROMPT ===")
@@ -335,12 +417,37 @@ async def on_message(message):
                 ai_response = await get_ai_response(content, message.author.display_name, user_drinks, server_id, channel_id)
                 logging.info(f"AI response received: {ai_response}")
                 
-                # Add bot response to conversation history
-                add_message_to_history(server_id, channel_id, "Bartender", ai_response, is_bot=True)
+                        # Add bot response to conversation history
+        add_message_to_history(server_id, channel_id, "Bartender", ai_response, is_bot=True)
+        
+        logging.info("Sending response to channel...")
+        await message.channel.send(ai_response)
+        logging.info("Response sent successfully!")
+        
+        # Check if Remy should give a drink (based on conversation comfort)
+        if should_remy_give_drink(user_name, content, ai_response, user_drinks):
+            drink_to_give = select_drink_to_give(user_drinks)
+            if drink_to_give:
+                # Add drink to user's collection
+                user_drinks.add(drink_to_give)
+                updated_data = {
+                    "drinks": list(user_drinks),
+                    "message_count": user_data.get("message_count", 0)
+                }
+                save_user_to_firestore(user_id, updated_data)
                 
-                logging.info("Sending response to channel...")
-                await message.channel.send(ai_response)
-                logging.info("Response sent successfully!")
+                # Send drink gift message
+                drink = cocktails[drink_to_give]
+                gift_message = f"*Remy smiles warmly* You know what? Here's a {drink['name']} on the house. {drink['emoji']} You've been great company tonight."
+                await message.channel.send(gift_message)
+                logging.info(f"Remy gave {drink_to_give} to {user_name}")
+            else:
+                # User has all drinks, give a random one anyway
+                drink_to_give = get_random_drink()
+                drink = cocktails[drink_to_give]
+                gift_message = f"*Remy grins* You know what? Here's another {drink['name']} on the house. {drink['emoji']} You're such a regular, I can't help myself!"
+                await message.channel.send(gift_message)
+                logging.info(f"Remy gave duplicate {drink_to_give} to {user_name}")
                 
             except Exception as e:
                 logging.error(f"Error in AI response handling: {e}")
@@ -352,7 +459,7 @@ async def on_message(message):
 
     if not user_data:
         # First time user
-        first_drink = random.choice(list(cocktails.keys()))
+        first_drink = get_random_drink()
         new_data = {
             "drinks": [first_drink],
             "message_count": 0
@@ -369,16 +476,14 @@ async def on_message(message):
     drinks = set(user_data.get("drinks", []))
     message_count = user_data.get("message_count", 0) + 1
 
-    if message_count >= 5:
-        if random.random() < 0.5:
-            drink_name = random.choice(list(cocktails.keys()))
-            if drink_name not in drinks:
-                drinks.add(drink_name)
-            await message.channel.send(
-                f"{message.author.mention}, here is your new drink: "
-                f"{cocktails[drink_name]['name']} {cocktails[drink_name]['emoji']}. Keep the conversation going."
-            )
-            message_count = 0  # Reset after reward
+    if should_give_reward(message_count, base_chance=0.5):
+        drink_name = get_random_drink()
+        drinks.add(drink_name)
+        await message.channel.send(
+            f"{message.author.mention}, here is your new drink: "
+            f"{cocktails[drink_name]['name']} {cocktails[drink_name]['emoji']}. Keep the conversation going."
+        )
+        message_count = 0  # Reset after reward
 
     # Add regular message to conversation history (for context)
     add_message_to_history(server_id, channel_id, message.author.display_name, message.content, is_bot=False)
