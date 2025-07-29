@@ -263,7 +263,7 @@ def get_conversation_context(server_id, channel_id, max_messages=5):
         
         for msg in recent_messages:
             if msg.get("is_bot", False):
-                context_lines.append(f"Bartender: {msg['content']}")
+                context_lines.append(f"Remy: {msg['content']}")
             else:
                 context_lines.append(f"{msg['author']}: {msg['content']}")
         
@@ -309,7 +309,7 @@ async def get_ai_response(user_message, user_name, user_drinks=None, server_id=N
             messages.append({"role": "user", "content": f"Context: {drink_context}{conversation_context}"})
         
         # Add the current user message
-        messages.append({"role": "user", "content": f"User ({user_name}) says: {user_message}"})
+        messages.append({"role": "user", "content": f"User ({user_name}) says: {user_message}\n\nRespond as Remy without any prefixes like 'Remy:' or 'Bartender:'."})
         
         logging.info(f"Calling OpenAI API with {len(messages)} messages")
         
