@@ -417,37 +417,37 @@ async def on_message(message):
                 ai_response = await get_ai_response(content, message.author.display_name, user_drinks, server_id, channel_id)
                 logging.info(f"AI response received: {ai_response}")
                 
-                        # Add bot response to conversation history
-        add_message_to_history(server_id, channel_id, "Bartender", ai_response, is_bot=True)
-        
-        logging.info("Sending response to channel...")
-        await message.channel.send(ai_response)
-        logging.info("Response sent successfully!")
-        
-        # Check if Remy should give a drink (based on conversation comfort)
-        if should_remy_give_drink(user_name, content, ai_response, user_drinks):
-            drink_to_give = select_drink_to_give(user_drinks)
-            if drink_to_give:
-                # Add drink to user's collection
-                user_drinks.add(drink_to_give)
-                updated_data = {
-                    "drinks": list(user_drinks),
-                    "message_count": user_data.get("message_count", 0)
-                }
-                save_user_to_firestore(user_id, updated_data)
+                # Add bot response to conversation history
+                add_message_to_history(server_id, channel_id, "Remy", ai_response, is_bot=True)
                 
-                # Send drink gift message
-                drink = cocktails[drink_to_give]
-                gift_message = f"*Remy smiles warmly* You know what? Here's a {drink['name']} on the house. {drink['emoji']} You've been great company tonight."
-                await message.channel.send(gift_message)
-                logging.info(f"Remy gave {drink_to_give} to {user_name}")
-            else:
-                # User has all drinks, give a random one anyway
-                drink_to_give = get_random_drink()
-                drink = cocktails[drink_to_give]
-                gift_message = f"*Remy grins* You know what? Here's another {drink['name']} on the house. {drink['emoji']} You're such a regular, I can't help myself!"
-                await message.channel.send(gift_message)
-                logging.info(f"Remy gave duplicate {drink_to_give} to {user_name}")
+                logging.info("Sending response to channel...")
+                await message.channel.send(ai_response)
+                logging.info("Response sent successfully!")
+                
+                # Check if Remy should give a drink (based on conversation comfort)
+                if should_remy_give_drink(message.author.display_name, content, ai_response, user_drinks):
+                    drink_to_give = select_drink_to_give(user_drinks)
+                    if drink_to_give:
+                        # Add drink to user's collection
+                        user_drinks.add(drink_to_give)
+                        updated_data = {
+                            "drinks": list(user_drinks),
+                            "message_count": user_data.get("message_count", 0)
+                        }
+                        save_user_to_firestore(user_id, updated_data)
+                        
+                        # Send drink gift message
+                        drink = cocktails[drink_to_give]
+                        gift_message = f"*Remy smiles warmly* You know what? Here's a {drink['name']} on the house. {drink['emoji']} You've been great company tonight."
+                        await message.channel.send(gift_message)
+                        logging.info(f"Remy gave {drink_to_give} to {message.author.display_name}")
+                    else:
+                        # User has all drinks, give a random one anyway
+                        drink_to_give = get_random_drink()
+                        drink = cocktails[drink_to_give]
+                        gift_message = f"*Remy grins* You know what? Here's another {drink['name']} on the house. {drink['emoji']} You're such a regular, I can't help myself!"
+                        await message.channel.send(gift_message)
+                        logging.info(f"Remy gave duplicate {drink_to_give} to {message.author.display_name}")
                 
             except Exception as e:
                 logging.error(f"Error in AI response handling: {e}")
