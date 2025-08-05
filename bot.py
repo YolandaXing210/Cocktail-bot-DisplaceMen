@@ -495,7 +495,13 @@ async def on_message(message):
     }
     save_user_to_firestore(user_id, updated_data)
 
+@client.event
+async def on_disconnect():
+    logging.warning("Bot disconnected from Discord.")
 
+@client.event
+async def on_resumed():
+    logging.info("Bot reconnected to Discord.")
 
 @tree.command(name="inventory", description="View your drink collection.")
 async def inventory(interaction: discord.Interaction):
@@ -652,5 +658,31 @@ async def start_bot():
             print("Bot crashed. Restarting in 5 seconds...", e)
             await asyncio.sleep(5)
 
-asyncio.run(start_bot())
+async def bot_watchdog():
+    while True:
+        if client.is_closed():
+            logging.warning("Bot is closed. Attempting to restart...")
+            try:
+                await client.start(os.getenv("DISCORD_TOKEN"))
+            except Exception as e:
+                logging.error("Restart attempt failed:\n" + traceback.format_exc())
+        await asyncio.sleep(300)  # check every 5 minutes
+
+async def run_bot_forever():
+    while True:
+        try:
+            logging.info("Starting bot...")
+            await client.start(os.getenv("DISCORD_TOKEN"))
+        except Exception as e:
+            logging.error("Bot crashed. Restarting in 5 seconds...\n" + traceback.format_exc())
+            await asyncio.sleep(5)
+        else:
+            logging.warning("Bot stopped cleanly. Restarting in 5 seconds...")
+            await asyncio.sleep(5)
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(run_bot_forever())
+    except KeyboardInterrupt:
+        logging.info("Shutdown requested by user.")
 
